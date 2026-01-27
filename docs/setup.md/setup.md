@@ -1,4 +1,4 @@
-# How to setup MCP
+## How to setup MCP
 
 Following https://modelcontextprotocol.io/docs/develop/build-server.
 
@@ -18,9 +18,24 @@ uv venv
 source .venv/bin/activate
 
 # Install dependencies
+# server
 uv add "mcp[cli]" httpx
+# client
+uv add anthropic python-dotenv
 
-# Create our server file
-touch server.py
+# Create our server and client files
+touch server.py client.py
+rm main.py
 ```
 
+## How to set up your API key
+
+On https://platform.claude.com/dashboard with a paid account, create a new API key.
+
+```bash
+# Create a `.env` to store the API key
+echo "ANTHROPIC_API_KEY=your-api-key-goes-here" > .env
+
+# Add `.env` to `.gitignore`
+echo ".env" >> .gitignore
+```
