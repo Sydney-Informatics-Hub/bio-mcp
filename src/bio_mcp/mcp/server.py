@@ -1,31 +1,24 @@
 import difflib
+import json
 from typing import List, Dict
 
 from mcp.server.fastmcp import FastMCP
 
 from bio_mcp.cache.load import load_cache
 from bio_mcp.globals import CACHE_PATH
+from pathlib import Path
 
 # Initialize FastMCP server
 mcp = FastMCP("bio-mcp")
 
-def _search_entry_name(cache_path: Path) -> Dict[str, object]:
+def fuzzy_search_entries(entry_names: List[str], cache_path: Path = CACHE_PATH) -> Dict[str, object]:
     """
     Fuzzy match a list of entry names against the cached tool names
     """
-    if not entry_names:
-        return {
-            "found": [],
-            "missing": [],
-            "count": 0,
-            "suggestions": {},
-            "entries": [],
-        }
-
-    # Load cache and get tool names
     cache = load_cache(cache_path)
     known_list = cache["tool_names"]
-    known_lower = {name.lower() for name in known_list}
+    known_lower_list = [name.lower() for name in known_list]
+    known_lower = set(known_lower_list)
     entries = cache.get("entries", [])
     found = []
     missing = []
@@ -39,7 +32,7 @@ def _search_entry_name(cache_path: Path) -> Dict[str, object]:
             missing.append(name)
             matches = difflib.get_close_matches(
                 name_lower,
-                [k.lower() for k in known_list],
+                known_lower_list,
                 n=5,
                 cutoff=0.7,
             )
@@ -60,11 +53,12 @@ def _search_entry_name(cache_path: Path) -> Dict[str, object]:
     }
 
 @mcp.tool()
-def list_containers(cache_file: CacheDocument) -> str:
+def search_entry_name(entry_names: List[str]) -> str:
     """
     List results from match
     """
-    return _search_entry_name(entry_names = cache_file)
+    matched_results = fuzzy_search_entries(entry_names)
+    return json.dumps(matched_results)
 
 if __name__ == "__main__":
     # Initialise and run the server
