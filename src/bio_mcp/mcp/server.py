@@ -17,46 +17,38 @@ biotools = load_biotools(YAML_PATH)
 # Initialize FastMCP server
 mcp = FastMCP("bio-mcp")
 
-def fuzzy_search_entries(entry_names: List[str], cache: Dict[Any]) -> Dict[str, object]:
+def search_containers(
+    tool_name: str,
+    registry: dict,
+    max_matches: int = 2,
+    cutoff: float = 0.7,
+) -> list[object] | dict | None:
     """
-    Fuzzy match a list of entry names against the cached tool names
+    Search for containers available in the CVMFS registry by name.
+    
+    Args:
+        registry: CVMFS container registry, keyed by lowercased container name
+        tool_name: Tool name to search in registry
+        max_matches: Max number of fuzzy matches to return
+        cutoff: Similarity threshold for fuzzy matching
+
+    Returns:
+        List of full registry entries (one per matched container name)
     """
-    cache = load_cache(cache_path)
-    known_list = cache["tool_names"]
-    known_lower_list = [name.lower() for name in known_list]
-    known_lower = set(known_lower_list)
-    entries = cache.get("entries", [])
-    found = []
-    missing = []
-    suggestions: Dict[str, List[str]] = {}
-    for name in entry_names:
-        name_lower = name.lower()
-        if name_lower in known_lower:
-            found.append(name)
-        else:
-            # Fuzzy match to provide suggestions, e.g. typos, close matches
-            missing.append(name)
-            matches = difflib.get_close_matches(
-                name_lower,
-                known_lower_list,
-                n=5,
-                cutoff=0.7,
-            )
-            if matches:
-                suggestions[name] = matches
+    # Exact match first 
+    available_names = list(registry.keys())
+    if tool_name in available_names:
+        return registry.get(tool_name)
+    
+    # Fuzzy match if no exact matches are found
+    matches = difflib.get_close_matches(tool_name, available_names, n=max_matches, cutoff=cutoff
+    )
 
-    found_lower = {name.lower() for name in found}
-    matched_entries = [
-        entry for entry in entries if entry.get("tool_name", "").lower() in found_lower
-    ]
+    if matches:
+        return [registry[name] for name in matches]
 
-    return {
-        "found": found,
-        "missing": missing,
-        "count": len(entry_names),
-        "suggestions": suggestions,
-        "entries": matched_entries,
-    }
+    # Return empty list of nothing found
+    return [None]
 
 @mcp.tool()
 def search_entry_name(entry_names: List[str]) -> str:
