@@ -1,24 +1,71 @@
 import asyncio
-import json
-import re
 from contextlib import AsyncExitStack
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from collections import defaultdict
+import logging
+import textwrap
 
 load_dotenv()
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
-def extract_entry_names(query: str) -> List[str]:
+def render_search_results(entries: List[Dict]) -> str:
     """
-    Get lowercase tokens that could be e.g. containers or reference data names.
+    Render search_containers results into a human-friendly print
+    with instructions to inspect the container on CVMFS
     """
-    tokens = re.findall(r"[a-zA-Z0-9_+-]+", query.lower())
-    return list(dict.fromkeys(tokens))
+    if not entries:
+        return "No matching conruntainers found."
+    
+    # Group entries by tool_name
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for entry in entries:
+        grouped[entry["tool_name"]].append(entry)
 
+    blocks: list[str] = []
+
+    for tool_name, tool_entries in sorted(grouped.items()):
+        version_count = len(tool_entries)
+
+        # Select most recent version by mtime
+        latest = max(tool_entries, key=lambda e: e.get("mtime", 0))
+
+        latest_tag = latest.get("tag", "unknown")
+        latest_path = latest.get("path", "<missing path>")
+
+        block = f"""Tool: {tool_name}
+Versions available: {version_count}
+Latest version: {latest_tag}
+
+To use the latest version:
+  singularity exec {latest_path} <command>
+"""
+        blocks.append(block.rstrip())
+
+    return "\n\n---\n\n".join(blocks)
+
+def render_startup_message(tools) -> None:
+    print("\nConnected to BioCLI!\n")
+    print("Available tools:\n")
+
+    for tool in tools:
+        print(f"  {tool.name}")
+        if tool.description:
+            desc = textwrap.fill(
+                tool.description.strip(),
+                width=76,
+                initial_indent="    ",
+                subsequent_indent="    ",
+            )
+            print(f"{desc}\n")
 
 class MCPClient:
     def __init__(self):
@@ -54,79 +101,9 @@ class MCPClient:
 
         response = await self.session.list_tools()
         tools = response.tools
-        print("\nConnected to server with tools:", [tool.name for tool in tools])
+        render_startup_message(tools)
 
     async def process_query(self, query: str) -> str:
-        """
-        No LLM use
-        """
-        # Get possible entry names from user input
-        entry_names = extract_entry_names(query)
-        if not entry_names:
-            return "No matching tools or data in query"
-
-        result = await self.session.call_tool(  # type: ignore
-            "search_entry_name", {"entry_names": entry_names}
-        )
-
-        # TODO: triage entry names with fuzzy matching vs. tool recommendations
-        payload = None
-        for item in result.content:
-            if item.type == "text":
-                payload = item.text
-                break
-
-        if not payload:
-            return "No response from search_entry_name."
-
-        data = json.loads(payload)
-        if not data.get("found") and not data.get("missing"):
-            return "No matching entries found in cache."
-
-        return self.format_with_llm(query, data)
-
-    def format_with_llm(self, query: str, data: dict) -> str:
-        """
-        Format the search result with Claude, using only the output JSON.
-        """
-        content_json = json.dumps(data, indent=2)
-        system_prompt = (
-            "You are formatting tool lookup results. "
-            "Only use the JSON provided; do not add extra tools. "
-            "Be concise and clear."
-        )
-        user_prompt = (
-            "User query:\n"
-            f"{query}\n\n"
-            "Lookup result JSON:\n"
-            f"{content_json}\n\n"
-            "Return a brief summary and a bullet list of found tools. "
-            "If missing tools exist, list them under 'Missing'. "
-            "If suggestions exist, include them under 'Suggestions'."
-        )
-
-        if not self.anthropic_model:
-            return (
-                "ANTHROPIC_MODEL is not set. "
-                "Set it to a model available in your Anthropic account."
-            )
-
-        try:
-            response = self.anthropic.messages.create(
-                model=self.anthropic_model,
-                max_tokens=400,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-        except Exception as exc:
-            return (
-                "LLM formatting failed. Check ANTHROPIC_MODEL and API key. "
-                f"Error: {exc}"
-            )
-
-        return response.content[0].text if response.content else "No LLM response."
-
-    async def process_query_boilerplate(self, query: str) -> str:
         """Process a query using Claude and available tools"""
         messages = [{"role": "user", "content": query}]
 
@@ -147,6 +124,8 @@ class MCPClient:
             messages=messages,
             tools=available_tools,
         )
+
+        logging.info(f"Initial Claude API call:\n{response}\n")
 
         # Process response and handle tool calls
         final_text = []
@@ -181,6 +160,8 @@ class MCPClient:
                     }
                 )
 
+                # TODO: If the tool_names used is search_containers, run render_search_contaienrs?
+
                 # Get next response from Claude
                 response = self.anthropic.messages.create(
                     model=self.anthropic_model,
@@ -189,9 +170,13 @@ class MCPClient:
                     tools=available_tools,
                 )
 
+                logging.info(f"Next response from Claude:\n{response}\n")
+
                 final_text.append(response.content[0].text)
 
+
         return "\n".join(final_text)
+
 
     async def chat_loop(self):
         """Run an interactive chat loop"""
@@ -207,7 +192,7 @@ class MCPClient:
                     break
 
                 # response = await self.process_query(query)
-                response = await self.process_query_boilerplate(query)
+                response = await self.process_query(query)
 
                 print("\n" + response)
 

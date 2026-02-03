@@ -16,7 +16,7 @@ biotools = load_biotools(YAML_PATH)
 # Initialize FastMCP server
 mcp = FastMCP("bio-mcp")
 
-def search_containers(
+def _search_containers(
     tool_names: str | List[str],
     registry: dict,
     max_matches: int = 2,
@@ -57,7 +57,7 @@ def search_containers(
     # Return empty list if no matches
     return results
 
-def describe_container(
+def _describe_container(
     cvmfs_registry: Dict[str, List[Dict[str, Any]]],
     biotools_registry: Dict[str, Dict[str, Any]],
     tool_names: List[str] | str,
@@ -96,17 +96,23 @@ def describe_container(
 
     return results
 
+def recommend_containers(keywords: List[str], biotools_registry: dict[Any]):
+    return
+    
 @mcp.tool()
-def search_containers_tool(tool_names: str) -> List[Any]:
+def search_containers(tool_names: str) -> str:
     """
     Search available containers on the CVMFS by name.
 
-    Returns all container registroy entries, such as versions, tags and the path on the CVMFS
+    Returns all container registry entries, such as versions, tags and the path on the CVMFS
     """
-    return search_containers(tool_names = tool_names, registry = cvmfs_galaxy_simg)
+    result = _search_containers(tool_names = tool_names, registry = cvmfs_galaxy_simg)
+    return f"""
+        There are {len(result)} container versions that match (or closely match) 
+    """ 
 
 @mcp.tool()
-def describe_container_tool(tool_names: str) -> List[Any]:
+def describe_container(tool_names: str) -> List[Any]:
     """
     Describe available containers by joining CVMFS inventory with bio.tools metadata.
 
@@ -114,7 +120,7 @@ def describe_container_tool(tool_names: str) -> List[Any]:
     - Metadata is included when available, otherwise null
     - No inference or fuzzy matching is performed
     """
-    return describe_container(cvmfs_registry = cvmfs_galaxy_simg, biotools_registry = biotools, tool_names = tool_names)
+    return _describe_container(cvmfs_registry = cvmfs_galaxy_simg, biotools_registry = biotools, tool_names = tool_names)
 
 if __name__ == "__main__":
     # Initialise and run the server
