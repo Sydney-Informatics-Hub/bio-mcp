@@ -16,7 +16,7 @@ biotools = load_biotools(YAML_PATH)
 # Initialize FastMCP server
 mcp = FastMCP("bio-mcp")
 
-def __search_containers(
+def _search_containers(
     tool_names: str | List[str],
     registry: dict,
     max_matches: int = 2,
@@ -57,7 +57,7 @@ def __search_containers(
     # Return empty list if no matches
     return results
 
-def __describe_container(
+def _describe_container(
     cvmfs_registry: Dict[str, List[Dict[str, Any]]],
     biotools_registry: Dict[str, Dict[str, Any]],
     tool_names: List[str] | str,
@@ -110,7 +110,6 @@ def search_containers(tool_names: str) -> List[Any]:
 
 @mcp.tool()
 def describe_container(tool_names: str) -> List[Any]:
-def describe_container(tool_names: str) -> List[Any]:
     """
     Describe available containers by joining CVMFS inventory with bio.tools metadata.
 
@@ -118,7 +117,6 @@ def describe_container(tool_names: str) -> List[Any]:
     - Metadata is included when available, otherwise null
     - No inference or fuzzy matching is performed
     """
-    return _describe_container(cvmfs_registry = cvmfs_galaxy_simg, biotools_registry = biotools, tool_names = tool_names)
     return _describe_container(cvmfs_registry = cvmfs_galaxy_simg, biotools_registry = biotools, tool_names = tool_names)
 
 if __name__ == "__main__":
