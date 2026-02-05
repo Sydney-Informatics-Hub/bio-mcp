@@ -7,8 +7,8 @@ from mcp.server.fastmcp import FastMCP
 from bio_mcp.cache.load import load_biotools, load_galaxy_singularity
 
 # Read in container and metadata snapshots when server starts
-JSON_PATH = Path("/home/ubuntu/bio-mcp/data/scrnaseq_galaxy_cvmfs.json")
-YAML_PATH = Path("/home/ubuntu/bio-mcp/data/scrnaseq_biotools.yaml")
+JSON_PATH = Path("/home/ubuntu/bio-mcp/data/galaxy_singularity_cache.json")
+YAML_PATH = Path("/home/ubuntu/bio-mcp/data/toolfinder_meta.yaml")
 
 cvmfs_galaxy_simg = load_galaxy_singularity(JSON_PATH)
 biotools = load_biotools(YAML_PATH)

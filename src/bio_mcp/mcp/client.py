@@ -336,11 +336,16 @@ class MCPClient:
                 query = input("\nQuery: ").strip()
 
                 if query.lower() == "quit":
+                    print("\nExiting...")
                     break
 
                 response = await self.process_query(query)
 
                 print("\n" + response)
+
+            except (EOFError, KeyboardInterrupt):
+                print('\nExiting...')
+                break
 
             except Exception as e:
                 print(f"\nError: {str(e)}")
