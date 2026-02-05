@@ -145,6 +145,7 @@ class MCPClient:
         response = self.anthropic.messages.create(
             model=self.anthropic_model,
             max_tokens=1000,
+            system = MASTER_PROMPT,
             messages=messages,
             tools=available_tools,
         )
@@ -201,12 +202,13 @@ class MCPClient:
 
         return "\n".join(final_text)
 
+    async def chat_loop(self):
+        """Run an interactive chat loop
         - Provides a simple command-line interface
         - Handles user input and displays responses
         - Allows graceful exit
+        """
 
-    async def chat_loop(self):
-        """Run an interactive chat loop"""
         print("\nMCP Client Started!")
         print("Type your queries or 'quit' to exit.")
         # TODO: Provide example queries, usage etc.
