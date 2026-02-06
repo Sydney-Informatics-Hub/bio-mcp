@@ -9,6 +9,7 @@ dependencies = [
     "httpx>=0.28.1",
     "mcp[cli]>=1.26.0",
     "pronto>=2.7.3",
+    "pytest>=9.0.2",
     "python-dotenv>=1.2.1",
     "pyyaml",
     "ruff>=0.14.14",

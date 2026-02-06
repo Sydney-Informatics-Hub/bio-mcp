@@ -4,7 +4,7 @@ import logging
 import textwrap
 from collections import defaultdict
 from contextlib import AsyncExitStack
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
@@ -12,7 +12,6 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from bio_mcp.globals import ANTHROPIC_MODEL
-from bio_mcp.mcp.prompts import MASTER_PROMPT, TOOL_SELECT_PROMPT, ToolSelectionResult
 
 load_dotenv()
 
@@ -21,43 +20,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-
-
-def render_search_results(entries: List[Dict]) -> str:
-    """
-    Render search_containers results into a human-friendly print
-    with instructions to inspect the container on CVMFS
-    """
-    if not entries:
-        return "No matching conruntainers found."
-
-    # Group entries by tool_name
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for entry in entries:
-        grouped[entry["tool_name"]].append(entry)
-
-    blocks: list[str] = []
-
-    for tool_name, tool_entries in sorted(grouped.items()):
-        version_count = len(tool_entries)
-
-        # Select most recent version by mtime
-        latest = max(tool_entries, key=lambda e: e.get("mtime", 0))
-
-        latest_tag = latest.get("tag", "unknown")
-        latest_path = latest.get("path", "<missing path>")
-
-        block = f"""Tool: {tool_name}
-Versions available: {version_count}
-Latest version: {latest_tag}
-
-To use the latest version:
-  singularity exec {latest_path} <command>
-"""
-        blocks.append(block.rstrip())
-
-    return "\n\n---\n\n".join(blocks)
-
 
 def render_startup_message(tools) -> None:
     print("\nConnected to BioCLI!\n")
@@ -74,6 +36,53 @@ def render_startup_message(tools) -> None:
             )
             print(f"{desc}\n")
 
+def route_query(query: str) -> Literal["search", "describe", "recommend", "none"]:
+    """Route query to appropriate skill based on simple keyword matching
+    - In future, can be replaced with a more sophisticated routing mechanism (e.g. skill)
+    """
+    q = query.lower()
+    search_phrases = [
+        "is installed",
+        "is it installed",
+        "installed?",
+        "where can i use",
+        "where do i use",
+        "where can i run",
+        "where is",
+        "available version",
+        "what versions are available",
+        "latest version",
+        "latest",
+        "are available?"
+    ]
+
+    describe_phrases = [
+        "what does",
+        "what is",
+        "purpose of",
+        "describe",
+    ]
+    
+    recommend_phrases = [
+        "what tool can be used",
+        "what tool should i use",
+        "what can i use to",
+        "can be used to",
+        "can be used for",
+        "tool for",
+        "used to generate",
+        "used to build",
+    ]
+
+    if any(p in q for p in search_phrases):
+        return "search"
+    elif any(p in q for p in describe_phrases):
+        return "describe"
+    elif any(p in q for p in recommend_phrases):
+        # Not implemented yet, blocked by metadata gaps
+        return "recommend"
+    else:
+        return "none"
 
 class MCPClient:
     def __init__(self):
@@ -82,6 +91,7 @@ class MCPClient:
         self.exit_stack = AsyncExitStack()
         self.anthropic = Anthropic()
         self.anthropic_model = ANTHROPIC_MODEL
+        self.tools: List[Dict[str, Any]] = []
 
     async def connect_to_server(self, server_script_path: str):
         """Connect to an MCP server
@@ -111,67 +121,21 @@ class MCPClient:
 
         await self.session.initialize()
 
+        self.tools = await self.list_tools()
+        render_startup_message(self.tools)
+
+    async def list_tools(self) -> List[Dict[str, Any]]:
+        """List registered MCP tools"""
+        if self.session is None:
+            raise RuntimeError("Not connected to server")
+
         response = await self.session.list_tools()
-        tools = response.tools
-        render_startup_message(tools)
-
-    def skill_tool_select(self, user_query: str, tools) -> ToolSelectionResult:
-        """
-        Decide whether an MCP tool should be used before it is called. This is to prevent the LLM providing an answer without the tool being used
-        """
-        tool_summaries = [
-            {
-                "name": t.name,
-                "description": t.description,
-                "inputSchema": t.inputSchema,
-            }
-            for t in tools
+        return [
+            {"name": tool.name, "description": tool.description, "input_schema": tool.inputSchema}
+            for tool in response.tools
         ]
 
-        messages = [
-            {
-                "role": "user",
-                "content": (
-                    f"User question:\n{user_query}\n\n"
-                    f"Available tools:\n"
-                    f"{json.dumps(tool_summaries, indent=2)}\n\n"
-                    f"{TOOL_SELECT_PROMPT}"
-                ),
-            }
-        ]
-
-        response = self.anthropic.messages.create(
-            model=self.anthropic_model,
-            system=MASTER_PROMPT,
-            max_tokens=400,
-            messages=messages,
-        )
-
-        text = response.content[0].text.strip()
-
-        # Remove code backticks from output if present
-        if text.startswith("```"):
-            text = text[3:]
-            if text.startswith("json"):
-                text = text[4:]
-            text = text.strip()
-            if text.endswith("```"):
-                text = text[:-3].rstrip()
-
-        try:
-            result: ToolSelectionResult = json.loads(text)
-        except json.JSONDecodeError:
-            raise RuntimeError(f"Tool selection skill returned invalid JSON:\n{text}")
-
-        # No hallucinating if a tool isn't selected
-        if result["decision"] == "use_tool":
-            if not result.get("tool_name"):
-                raise RuntimeError("Skill error: tool_name missing")
-        else:
-            result["tool_name"] = None
-
-        return result
-
+        
     async def process_query(self, query: str) -> str:
         """
         Process a query using Claude and registered MCP tools.
