@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import textwrap
 from collections import defaultdict
 from contextlib import AsyncExitStack
@@ -12,6 +13,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from bio_mcp.globals import ANTHROPIC_MODEL
+from bio_mcp.mcp.phrases import _SEARCH_PHRASES, _DESCRIBE_PHRASES, _RECOMMEND_PHRASES, _COMMON_WORDS
 
 load_dotenv()
 
@@ -41,48 +43,25 @@ def route_query(query: str) -> Literal["search", "describe", "recommend", "none"
     - In future, can be replaced with a more sophisticated routing mechanism (e.g. skill)
     """
     q = query.lower()
-    search_phrases = [
-        "is installed",
-        "is it installed",
-        "installed?",
-        "where can i use",
-        "where do i use",
-        "where can i run",
-        "where is",
-        "available version",
-        "what versions are available",
-        "latest version",
-        "latest",
-        "are available?"
-    ]
 
-    describe_phrases = [
-        "what does",
-        "what is",
-        "purpose of",
-        "describe",
-    ]
-    
-    recommend_phrases = [
-        "what tool can be used",
-        "what tool should i use",
-        "what can i use to",
-        "can be used to",
-        "can be used for",
-        "tool for",
-        "used to generate",
-        "used to build",
-    ]
-
-    if any(p in q for p in search_phrases):
+    # TODO: Bad because it prioritises search > describe > recommend
+    if any(p in q for p in _SEARCH_PHRASES):
         return "search"
-    elif any(p in q for p in describe_phrases):
+    elif any(p in q for p in _DESCRIBE_PHRASES):
         return "describe"
-    elif any(p in q for p in recommend_phrases):
+    elif any(p in q for p in _RECOMMEND_PHRASES):
         # Not implemented yet, blocked by metadata gaps
         return "recommend"
     else:
         return "none"
+
+def extract_tool_names(query: str) -> List[str]:
+    """Extract potential tool names from query using simple regex and filtering
+    """
+    # Simple regex to extract words, filter out common words
+    words = re.findall(r"[a-z0-9]+", query.lower())
+    tool_names = [w for w in words if w not in _COMMON_WORDS]
+    return tool_names
 
 class MCPClient:
     def __init__(self):
