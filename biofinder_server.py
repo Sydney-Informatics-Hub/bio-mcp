@@ -154,7 +154,7 @@ class BioContainerIndex:
             'container_count': len(containers_sorted)
         }
     
-    def search_by_description(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def search_by_description(self, query: str, limit: int = 3) -> List[Dict[str, Any]]:
         """
         Search tools by description or functionality.
         Useful for queries like "What can I use to generate count data?"
@@ -338,7 +338,7 @@ async def list_tools() -> list[Tool]:
                     "limit": {
                         "type": "integer",
                         "description": "Maximum number of tools to list",
-                        "default": 50
+                        "default": 10
                     }
                 },
                 "required": []
@@ -361,56 +361,68 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         # Tool information
         if result['metadata']:
             meta = result['metadata']
-            response_parts.append(f"# {meta.get('name', tool_name.upper())}\n")
-            
+            response_parts.append(f"\n{'='*70}\n")
+            response_parts.append(f"🧬 {meta.get('name', tool_name.upper())}\n")
+            response_parts.append(f"{'='*70}\n\n")
+
             if meta.get('description'):
-                response_parts.append(f"**Description:** {meta['description']}\n")
+                response_parts.append(f"📝 Description:\n")
+                response_parts.append(f"   {meta['description']}\n\n")
             
             if meta.get('homepage'):
-                response_parts.append(f"**Homepage:** {meta['homepage']}\n")
+                response_parts.append(f"🌐 Homepage: {meta['homepage']}\n")
             
-            if meta.get('license'):
-                response_parts.append(f"**License:** {meta['license']}\n")
+            #if meta.get('license'):
+            #    response_parts.append(f"📜 License: {meta['license']}\n")
             
             # Operations
             if meta.get('edam-operations'):
-                response_parts.append(f"\n**Operations:** {', '.join(meta['edam-operations'])}\n")
+                response_parts.append(f"⚙️  Operations: {', '.join(meta['edam-operations'])}\n")
         else:
-            response_parts.append(f"# {tool_name}\n")
-            response_parts.append("(No metadata available for this tool)\n")
+            response_parts.append(f"\n{'='*70}\n")
+            response_parts.append(f"🧬 {tool_name.upper()}\n")
+            response_parts.append(f"{'='*70}\n\n")
+            response_parts.append("ℹ️  No metadata available for this tool\n")
         
         # Container information
         if result['containers']:
-            response_parts.append(f"\n## Available Containers ({result['container_count']} versions)\n")
+            response_parts.append(f"\n{'─'*70}\n")
+            response_parts.append(f"📦 AVAILABLE CONTAINERS ({result['container_count']} versions)\n")
+            response_parts.append(f"{'─'*70}\n\n")
             
             # Most recent version
             latest = result['containers'][0]
-            response_parts.append(f"\n### Most Recent Version: {latest['tag']}\n")
-            response_parts.append(f"**Path:** `{latest['path']}`\n")
-            response_parts.append(f"**Size:** {latest['size_bytes'] / (1024**2):.1f} MB\n")
+            response_parts.append(f"✨ Most Recent Version: {latest['tag']}\n\n")
+            response_parts.append(f"   Path: {latest['path']}\n")
+            response_parts.append(f"   Size: {latest['size_bytes'] / (1024**2):.1f} MB\n\n")
             
             # Usage example
-            response_parts.append(f"\n### Usage Example:\n")
-            response_parts.append(f"```bash\n")
+            response_parts.append(f"{'─'*70}\n")
+            response_parts.append(f"💡 USAGE EXAMPLES\n")
+            response_parts.append(f"{'─'*70}\n\n")
             response_parts.append(f"# Execute a command in the container\n")
-            response_parts.append(f"singularity exec {latest['path']} {tool_name} --help\n\n")
+            response_parts.append(f"singularity exec {latest['path']} \\\n")
+            response_parts.append(f"  {tool_name} --help\n\n")
             response_parts.append(f"# Run interactively\n")
             response_parts.append(f"singularity shell {latest['path']}\n")
-            response_parts.append(f"```\n")
             
             # Show all versions
             if len(result['containers']) > 1:
-                response_parts.append(f"\n### All Available Versions:\n")
-                for container in result['containers'][:10]:  # Show top 10
+                response_parts.append(f"\n{'─'*70}\n")
+                response_parts.append(f"📚 OTHER VERSIONS\n")
+                response_parts.append(f"{'─'*70}\n\n")
+                for i, container in enumerate(result['containers'][:3], 1):  # Show top 3
                     response_parts.append(
-                        f"- **{container['tag']}** - `{container['path']}`\n"
+                        f"  {i:2}. {container['tag']}\n"
+                        f"      {container['path']}\n"
                     )
-                if len(result['containers']) > 10:
-                    response_parts.append(f"\n... and {len(result['containers']) - 10} more versions\n")
+                if len(result['containers']) > 3:
+                    response_parts.append(f"   ... and {len(result['containers']) - 3} more versions\n")
         else:
-            response_parts.append("\n⚠️ **No containers found in CVMFS for this tool.**\n")
-            response_parts.append("The tool may be available through other means or under a different name.\n")
+            response_parts.append(f"\n⚠️  WARNING: No containers found in CVMFS for this tool\n")
+            response_parts.append(f"   The tool may be available through other means or under a different name.\n")
         
+        response_parts.append(f"\n{'='*70}\n")
         return [TextContent(type="text", text="".join(response_parts))]
     
     elif name == "search_by_function":
@@ -433,20 +445,20 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             score = result_item['score']
             
             response_parts.append(f"## {i}. {tool.get('name', tool.get('id', 'Unknown'))}\n")
-            response_parts.append(f"**ID:** {tool.get('id', 'N/A')}\n")
+            response_parts.append(f"ID: {tool.get('id', 'N/A')}\n")
             
             if tool.get('description'):
-                response_parts.append(f"**Description:** {tool['description']}\n")
+                response_parts.append(f"Description: {tool['description']}\n")
             
             if tool.get('edam-operations'):
-                response_parts.append(f"**Operations:** {', '.join(tool['edam-operations'])}\n")
+                response_parts.append(f"Operations: {', '.join(tool['edam-operations'])}\n")
             
             # Check if containers available
             tool_search = index.search_tool(tool.get('id', ''))
             if tool_search['containers']:
                 latest = tool_search['containers'][0]
-                response_parts.append(f"**Latest Container:** `{latest['tag']}`\n")
-                response_parts.append(f"**Quick Start:** `singularity exec {latest['path']} {tool.get('id', '')} --help`\n")
+                response_parts.append(f"Latest Container: `{latest['tag']}`\n")
+                response_parts.append(f"Quick Start: `singularity exec {latest['path']} {tool.get('id', '')} --help`\n")
             
             response_parts.append("\n")
         
@@ -467,9 +479,9 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         
         for container in result['containers']:
             response_parts.append(f"## Version {container['tag']}\n")
-            response_parts.append(f"- **Path:** `{container['path']}`\n")
-            response_parts.append(f"- **Size:** {container['size_bytes'] / (1024**2):.1f} MB\n")
-            response_parts.append(f"- **Modified:** {datetime.fromtimestamp(container['mtime']).strftime('%Y-%m-%d')}\n\n")
+            response_parts.append(f"- Path: `{container['path']}`\n")
+            response_parts.append(f"- Size: {container['size_bytes'] / (10242):.1f} MB\n")
+            response_parts.append(f"- Modified: {datetime.fromtimestamp(container['mtime']).strftime('%Y-%m-%d')}\n\n")
         
         return [TextContent(type="text", text="".join(response_parts))]
     

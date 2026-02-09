@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-BioContainer Finder MCP Client
+BioFinder MCP Client
 
-Command-line client for querying the BioContainer MCP server.
+Command-line client for querying the CVMFS-MCP server.
 """
 
 import asyncio
@@ -61,7 +61,7 @@ async def get_versions(session: ClientSession, tool_name: str):
 
 async def interactive_mode(session: ClientSession):
     """Interactive query mode."""
-    print("\n=== BioContainer Finder - Interactive Mode ===")
+    print("\n=== BioFinder - Interactive Mode ===")
     print("Commands:")
     print("  find <tool_name>          - Find a specific tool")
     print("  search <description>      - Search by function/description")
@@ -73,7 +73,7 @@ async def interactive_mode(session: ClientSession):
     
     while True:
         try:
-            user_input = input("biocontainer> ").strip()
+            user_input = input("biofinder> ").strip()
             
             if not user_input:
                 continue
@@ -101,7 +101,7 @@ async def interactive_mode(session: ClientSession):
             elif command == "versions" and len(parts) > 1:
                 await get_versions(session, parts[1])
             elif command == "list":
-                limit = 50
+                limit = 10
                 if len(parts) > 1 and parts[1].isdigit():
                     limit = int(parts[1])
                 await list_tools(session, limit)
@@ -118,24 +118,24 @@ async def interactive_mode(session: ClientSession):
 async def main():
     """Main entry point."""
     if len(sys.argv) < 2:
-        print("BioContainer Finder MCP Client")
+        print("BioFinder MCP Client")
         print("\nUsage:")
-        print("  biocontainer_client.py find <tool_name>")
-        print("  biocontainer_client.py search <description>")
-        print("  biocontainer_client.py versions <tool_name>")
-        print("  biocontainer_client.py list [limit]")
-        print("  biocontainer_client.py interactive")
+        print("  biofinder_client.py find <tool_name>")
+        print("  biofinder_client.py search <description>")
+        print("  biofinder_client.py versions <tool_name>")
+        print("  biofinder_client.py list [limit]")
+        print("  biofinder_client.py interactive")
         print("\nExamples:")
-        print("  biocontainer_client.py find fastqc")
-        print("  biocontainer_client.py search 'quality control'")
-        print("  biocontainer_client.py search 'count data from scrna'")
-        print("  biocontainer_client.py versions samtools")
-        print("  biocontainer_client.py list 100")
-        print("  biocontainer_client.py interactive")
+        print("  biofinder_client.py find fastqc")
+        print("  biofinder_client.py search 'quality control'")
+        print("  biofinder_client.py search 'count data from scrna'")
+        print("  biofinder_client.py versions samtools")
+        print("  biofinder_client.py list 100")
+        print("  biofinder_client.py interactive")
         sys.exit(1)
     
     # Locate server script
-    server_script = Path(__file__).parent / "biocontainer_server.py"
+    server_script = Path(__file__).parent / "biofinder_server.py"
     
     if not server_script.exists():
         print(f"Error: Server script not found at {server_script}")
