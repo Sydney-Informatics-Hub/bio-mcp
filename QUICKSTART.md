@@ -1,4 +1,4 @@
-# BioContainer Finder MCP - Quick Start Guide
+# BioFinder MCP - Quick Start Guide
 
 ## What is this?
 
@@ -11,7 +11,7 @@ An MCP (Model Context Protocol) server that helps you find and use bioinformatic
 pip install --break-system-packages mcp pyyaml
 
 # 2. Make scripts executable
-chmod +x biocontainer_server.py biocontainer_client.py test_demo.py
+chmod +x biofinder_server.py biofinder_client.py test_demo.py
 
 # 3. Run demo to verify it works
 python3 test_demo.py
@@ -23,30 +23,30 @@ python3 test_demo.py
 
 ```bash
 # Find a tool
-./biocontainer_client.py find fastqc
+./biofinder_client.py find fastqc
 
 # Search by what it does
-./biocontainer_client.py search "quality control"
-./biocontainer_client.py search "variant calling"
+./biofinder_client.py search "quality control"
+./biofinder_client.py search "variant calling"
 
 # Get all versions
-./biocontainer_client.py versions samtools
+./biofinder_client.py versions samtools
 
 # List available tools
-./biocontainer_client.py list 100
+./biofinder_client.py list 100
 ```
 
 ### Interactive Mode
 
 ```bash
-./biocontainer_client.py interactive
+./biofinder_client.py interactive
 
 # Then type commands:
-biocontainer> find fastqc
-biocontainer> search alignment
-biocontainer> versions bwa
-biocontainer> list
-biocontainer> quit
+biofinder> find fastqc
+biofinder> search alignment
+biofinder> versions bwa
+biofinder> list
+biofinder> quit
 ```
 
 ## Supported Query Types
@@ -93,10 +93,10 @@ Usage Example:
 
 ```bash
 # Find QC tools
-./biocontainer_client.py search "quality control"
+./biofinder_client.py search "quality control"
 
 # Get specific tool
-./biocontainer_client.py find fastqc
+./biofinder_client.py find fastqc
 
 # Use in your script
 singularity exec /cvmfs/singularity.galaxyproject.org/all/fastqc:0.12.1--hdfd78af_0 \
@@ -107,20 +107,20 @@ singularity exec /cvmfs/singularity.galaxyproject.org/all/fastqc:0.12.1--hdfd78a
 
 ```bash
 # What can align sequences?
-./biocontainer_client.py search "sequence alignment"
+./biofinder_client.py search "sequence alignment"
 
 # What can call variants?
-./biocontainer_client.py search "variant calling"
+./biofinder_client.py search "variant calling"
 
 # What can assemble genomes?
-./biocontainer_client.py search "genome assembly"
+./biofinder_client.py search "genome assembly"
 ```
 
 ### 3. Version Management
 
 ```bash
 # See all versions
-./biocontainer_client.py versions samtools
+./biofinder_client.py versions samtools
 
 # Pick specific version for reproducibility
 singularity exec /cvmfs/singularity.galaxyproject.org/all/samtools:1.17--h00cdaf9_0 \
@@ -144,7 +144,7 @@ The server provides 4 MCP tools:
 
 **"No containers found"**
 - Tool may be spelled differently
-- Try searching: `./biocontainer_client.py search toolname`
+- Try searching: `./biofinder_client.py search toolname`
 
 **"Server script not found"**
 - Ensure scripts are in same directory

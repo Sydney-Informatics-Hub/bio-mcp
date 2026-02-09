@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BioContainer Finder MCP Server
+BioFinder MCP Server
 
 This MCP server provides bioinformatics container discovery for CVMFS-hosted
 Singularity containers, helping users find and use containerized tools.
@@ -35,7 +35,7 @@ METADATA_FILE = DATA_DIR / "toolfinder_meta.yaml"
 SINGULARITY_CACHE_FILE = DATA_DIR / "galaxy_singularity_cache.json.gz"
 
 
-class BioContainerIndex:
+class BioFinderIndex:
     """Index of container metadata and singularity images."""
     
     def __init__(self):
@@ -128,9 +128,9 @@ class BioContainerIndex:
             query_lower.replace('_', '-'),
         ]
         
-        # Add biocontainers name if available
-        if tool_meta and tool_meta.get('biocontainers'):
-            search_variations.append(tool_meta['biocontainers'].lower())
+        # Add name if available
+        if tool_meta and tool_meta.get('id'):
+            search_variations.append(tool_meta['id'].lower())
         
         for variation in search_variations:
             if variation in self.container_index:
@@ -165,6 +165,7 @@ class BioContainerIndex:
         results = []
         
         for entry in self.metadata:
+            # TODO: Benchmark scoring. Improve suggestions with LLM. Rescore based on e.g. prioritising EDAM matches
             score = 0
             
             # Search in description
@@ -210,7 +211,7 @@ class BioContainerIndex:
         results.sort(key=lambda x: x['score'], reverse=True)
         return results[:limit]
     
-    def list_all_tools(self, limit: int = 50) -> List[str]:
+    def list_all_tools(self, limit: int = 10) -> List[str]:
         """List all available tool names."""
         tools = set()
         
@@ -227,10 +228,10 @@ class BioContainerIndex:
 
 
 # Initialize the index
-index = BioContainerIndex()
+index = BioFinderIndex()
 
 # Create MCP server
-app = Server("biocontainer-finder")
+app = Server("bio-finder")
 
 
 @app.list_resources()
@@ -238,16 +239,16 @@ async def list_resources() -> list[Resource]:
     """List available resources (the data sources)."""
     return [
         Resource(
-            uri="biocontainer://cache-info",
-            name="CVMFS Cache Information",
+            uri="biofinder://cvmfs-galaxy-containers",
+            name="CVMFS Cache Information (Galaxy containers)",
             mimeType="application/json",
-            description="Information about the Singularity container cache"
+            description="Information about the Singularity container cache from the CVMFS"
         ),
         Resource(
-            uri="biocontainer://tool-list",
-            name="Available Tools List",
+            uri="biofinder://metadata",
+            name="Tool metadata",
             mimeType="text/plain",
-            description="List of all available bioinformatics tools"
+            description="Bio.tools metadata from https://github.com/AustralianBioCommons/finder-service-metadata/blob/main/data/data.yaml"
         )
     ]
 
@@ -255,10 +256,10 @@ async def list_resources() -> list[Resource]:
 @app.read_resource()
 async def read_resource(uri: str) -> str:
     """Read resource content."""
-    if uri == "biocontainer://cache-info":
+    if uri == "biofinder://cvmfs-galaxy-containers":
         return json.dumps(index.cache_info, indent=2)
-    elif uri == "biocontainer://tool-list":
-        tools = index.list_all_tools(limit=1000)
+    elif uri == "biofinder://metadata":
+        tools = index.list_all_tools(limit=999999)
         return "\n".join(tools)
     else:
         raise ValueError(f"Unknown resource: {uri}")
@@ -349,7 +350,11 @@ async def list_tools() -> list[Tool]:
 
 @app.call_tool()
 async def call_tool(name: str, arguments: Any) -> list[TextContent]:
-    """Handle tool calls."""
+    """
+    Handle tool calls based on the tool name and arguments. 
+
+    Piece together responses based on available metadata and container information, formatted for user readability.
+    """
     
     if name == "find_tool":
         tool_name = arguments["tool_name"]
@@ -367,13 +372,10 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 
             if meta.get('description'):
                 response_parts.append(f"📝 Description:\n")
-                response_parts.append(f"   {meta['description']}\n\n")
+                response_parts.append(f"   {meta['description']}\n\n")  
             
             if meta.get('homepage'):
                 response_parts.append(f"🌐 Homepage: {meta['homepage']}\n")
-            
-            #if meta.get('license'):
-            #    response_parts.append(f"📜 License: {meta['license']}\n")
             
             # Operations
             if meta.get('edam-operations'):
@@ -437,30 +439,34 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 text=f"No tools found matching '{description}'. Try different keywords or browse available tools."
             )]
         
-        response_parts = [f"# Tools for: {description}\n\n"]
-        response_parts.append(f"Found {len(results)} matching tools:\n\n")
+        response_parts = []
+        response_parts.append(f"\n{'='*70}\n")
+        response_parts.append(f"🔎 TOOLS MATCHING: {description}\n")
+        response_parts.append(f"{'='*70}\n\n")
+        response_parts.append(f"Found {len(results)} matching tools.\n")
         
         for i, result_item in enumerate(results, 1):
             tool = result_item['tool']
             score = result_item['score']
-            
-            response_parts.append(f"## {i}. {tool.get('name', tool.get('id', 'Unknown'))}\n")
-            response_parts.append(f"ID: {tool.get('id', 'N/A')}\n")
-            
+
+            tool_name = tool.get('name') or tool.get('id', 'Unknown')
+            tool_id = tool.get('id', 'N/A')
+            response_parts.append(f"\n{'─'*70}\n")
+            response_parts.append(f"{i:2}. 🧬 {tool_name} (`{tool_id}`)  |  Score: {score:.3f}\n")
+            response_parts.append(f"{'─'*70}\n")
+
             if tool.get('description'):
-                response_parts.append(f"Description: {tool['description']}\n")
-            
+                response_parts.append(f"📝 {tool['description']}\n")
+
             if tool.get('edam-operations'):
-                response_parts.append(f"Operations: {', '.join(tool['edam-operations'])}\n")
-            
+                response_parts.append(f"⚙️  Operations: {', '.join(tool['edam-operations'])}\n")
+
             # Check if containers available
             tool_search = index.search_tool(tool.get('id', ''))
             if tool_search['containers']:
                 latest = tool_search['containers'][0]
-                response_parts.append(f"Latest Container: `{latest['tag']}`\n")
+                response_parts.append(f"📦 Latest Container: `{latest['tag']}`\n")
                 response_parts.append(f"Quick Start: `singularity exec {latest['path']} {tool.get('id', '')} --help`\n")
-            
-            response_parts.append("\n")
         
         return [TextContent(type="text", text="".join(response_parts))]
     
@@ -501,7 +507,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 async def main():
     """Run the MCP server."""
     # Load data
-    #print("Initializing BioContainer Finder MCP Server...")
+    #print("Initializing BioFinder MCP Server...")
     index.load_data()
     #print("Ready to serve requests!")
     

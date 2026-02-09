@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script for BioContainer Finder MCP
+Test script for BioFinder MCP
 
 Demonstrates the functionality without needing the full MCP client-server setup.
 """
@@ -15,9 +15,9 @@ import re
 
 
 # Data paths
-DATA_DIR = Path("/mnt/user-data/uploads")
+DATA_DIR = Path(__file__).resolve().parent
 METADATA_FILE = DATA_DIR / "toolfinder_meta.yaml"
-SINGULARITY_CACHE_FILE = DATA_DIR / "galaxy_singularity_cache_json.gz"
+SINGULARITY_CACHE_FILE = DATA_DIR / "galaxy_singularity_cache.json.gz"
 
 
 class BioContainerIndex:
@@ -165,84 +165,108 @@ class BioContainerIndex:
 
 def demo_find_tool(index, tool_name):
     """Demo: Find a specific tool."""
-    print(f"\n{'='*70}")
-    print(f"DEMO: Finding tool '{tool_name}'")
-    print(f"{'='*70}\n")
-    
     result = index.search_tool(tool_name)
     
+    response_parts = []
+
     if result['metadata']:
         meta = result['metadata']
-        print(f"# {meta.get('name', tool_name.upper())}\n")
-        
+
+        response_parts.append(f"\n{'='*70}\n")
+        response_parts.append(f"🧬 {meta.get('name', tool_name.upper())}\n")
+        response_parts.append(f"{'='*70}\n\n")
+
         if meta.get('description'):
-            print(f"Description: {meta['description']}\n")
-        
+            response_parts.append("📝 Description:\n")
+            response_parts.append(f"   {meta['description']}\n\n")
+
         if meta.get('homepage'):
-            print(f"Homepage: {meta['homepage']}")
-        
-        if meta.get('license'):
-            print(f"License: {meta['license']}")
-        
+            response_parts.append(f"🌐 Homepage: {meta['homepage']}\n")
+
         if meta.get('edam-operations'):
-            print(f"Operations: {', '.join(meta['edam-operations'])}")
+            response_parts.append(f"⚙️  Operations: {', '.join(meta['edam-operations'])}\n")
+    else:
+        response_parts.append(f"\n{'='*70}\n")
+        response_parts.append(f"🧬 {tool_name.upper()}\n")
+        response_parts.append(f"{'='*70}\n\n")
+        response_parts.append("ℹ️  No metadata available for this tool\n")
     
     if result['containers']:
-        print(f"\nAvailable Containers: {result['container_count']} versions\n")
-        
+        response_parts.append(f"\n{'─'*70}\n")
+        response_parts.append(f"📦 AVAILABLE CONTAINERS ({result['container_count']} versions)\n")
+        response_parts.append(f"{'─'*70}\n\n")
+
         latest = result['containers'][0]
-        print(f"Most Recent Version: {latest['tag']}")
-        print(f"Path: {latest['path']}")
-        print(f"Size: {latest['size_bytes'] / (1024**2):.1f} MB\n")
-        
-        print("Usage Example:")
-        print(f"  singularity exec {latest['path']} {tool_name} --help\n")
-        
+        response_parts.append(f"✨ Most Recent Version: {latest['tag']}\n\n")
+        response_parts.append(f"   Path: {latest['path']}\n")
+        response_parts.append(f"   Size: {latest['size_bytes'] / (1024**2):.1f} MB\n\n")
+
+        response_parts.append(f"{'─'*70}\n")
+        response_parts.append("💡 USAGE EXAMPLES\n")
+        response_parts.append(f"{'─'*70}\n\n")
+        response_parts.append("# Execute a command in the container\n")
+        response_parts.append(f"singularity exec {latest['path']} \\\n")
+        response_parts.append(f"  {tool_name} --help\n\n")
+        response_parts.append("# Run interactively\n")
+        response_parts.append(f"singularity shell {latest['path']}\n")
+
         if len(result['containers']) > 1:
-            print(f"Other versions available: {len(result['containers']) - 1} more")
-            print(f"  Latest 5:")
-            for container in result['containers'][1:6]:
-                print(f"    - {container['tag']}")
+            response_parts.append(f"\n{'─'*70}\n")
+            response_parts.append("📚 OTHER VERSIONS\n")
+            response_parts.append(f"{'─'*70}\n\n")
+            for i, container in enumerate(result['containers'][:3], 1):
+                response_parts.append(
+                    f"  {i:2}. {container['tag']}\n"
+                    f"      {container['path']}\n"
+                )
+            if len(result['containers']) > 3:
+                response_parts.append(
+                    f"   ... and {len(result['containers']) - 3} more versions\n"
+                )
     else:
-        print("\n⚠️  No containers found in CVMFS for this tool.")
+        response_parts.append("\n⚠️  WARNING: No containers found in CVMFS for this tool\n")
+        response_parts.append("   The tool may be available through other means or under a different name.\n")
+
+    response_parts.append(f"\n{'='*70}\n")
+
+    print("".join(response_parts))
 
 
 def demo_search_function(index, description):
     """Demo: Search by function."""
-    print(f"\n{'='*70}")
-    print(f"DEMO: Searching for tools related to '{description}'")
-    print(f"{'='*70}\n")
-    
     results = index.search_by_description(description, limit=5)
     
     if not results:
-        print(f"No tools found matching '{description}'")
+        print(f"No tools found matching '{description}'. Try different keywords or browse available tools.")
         return
     
-    print(f"Found {len(results)} matching tools:\n")
+    response_parts = [f"# Tools for: {description}\n\n"]
+    response_parts.append(f"Found {len(results)} matching tools:\n\n")
     
     for i, result_item in enumerate(results, 1):
         tool = result_item['tool']
         
-        print(f"{i}. {tool.get('name', tool.get('id', 'Unknown'))}")
-        print(f"   ID: {tool.get('id', 'N/A')}")
-        
+        response_parts.append(f"## {i}. {tool.get('name', tool.get('id', 'Unknown'))}\n")
+        response_parts.append(f"ID: {tool.get('id', 'N/A')}\n")
+
         if tool.get('description'):
-            desc = tool['description']
-            if len(desc) > 100:
-                desc = desc[:100] + "..."
-            print(f"   Description: {desc}")
-        
+            response_parts.append(f"Description: {tool['description']}\n")
+
         if tool.get('edam-operations'):
-            print(f"   Operations: {', '.join(tool['edam-operations'][:3])}")
+            response_parts.append(f"Operations: {', '.join(tool['edam-operations'])}\n")
         
         # Check if containers available
         tool_search = index.search_tool(tool.get('id', ''))
         if tool_search['containers']:
             latest = tool_search['containers'][0]
-            print(f"   Latest: {latest['tag']}")
-        
-        print()
+            response_parts.append(f"Latest Container: `{latest['tag']}`\n")
+            response_parts.append(
+                f"Quick Start: `singularity exec {latest['path']} {tool.get('id', '')} --help`\n"
+            )
+
+        response_parts.append("\n")
+
+    print("".join(response_parts))
 
 
 def main():

@@ -1,4 +1,4 @@
-# BioContainer Finder MCP
+# BioFinder MCP
 
 A Model Context Protocol (MCP) server and client for discovering and using bioinformatics tools available in the Galaxy CVMFS Singularity container repository.
 
@@ -13,8 +13,8 @@ This MCP provides:
 ## Data Sources
 
 The MCP uses two authoritative data sources:
-1. **toolfinder_meta.yaml** - Tool metadata including descriptions, operations, and publications
-2. **galaxy_singularity_cache_json.gz** - Complete CVMFS container catalog (118,000+ entries)
+1. **toolfinder_meta.yaml** - Tool metadata including descriptions, operations, and publications. [Sourced from `finder-service-metadata`](https://github.com/AustralianBioCommons/finder-service-metadata/blob/main/data/data.yaml)
+2. **galaxy_singularity_cache.json.gz** - Complete CVMFS container catalog (118,000+ entries)
 
 ## Features
 
@@ -66,8 +66,8 @@ Or manually:
 pip install --break-system-packages -r requirements.txt
 
 # Make scripts executable
-chmod +x biocontainer_server.py
-chmod +x biocontainer_client.py
+chmod +x biofinder_server.py
+chmod +x biofinder_client.py
 ```
 
 ## Usage
@@ -76,36 +76,36 @@ chmod +x biocontainer_client.py
 
 ```bash
 # Find a specific tool
-./biocontainer_client.py find fastqc
+./biofinder_client.py find fastqc
 
 # Search by function/description
-./biocontainer_client.py search "quality control"
-./biocontainer_client.py search "count data from scrna"
+./biofinder_client.py search "quality control"
+./biofinder_client.py search "count data from scrna"
 
 # Get all versions of a tool
-./biocontainer_client.py versions samtools
+./biofinder_client.py versions samtools
 
 # List available tools
-./biocontainer_client.py list 50
+./biofinder_client.py list 50
 
 # Interactive mode
-./biocontainer_client.py interactive
+./biofinder_client.py interactive
 ```
 
 ### Interactive Mode
 
 ```bash
-./biocontainer_client.py interactive
+./biofinder_client.py interactive
 ```
 
 Then use commands:
 ```
-biocontainer> find fastqc
-biocontainer> search alignment
-biocontainer> versions bwa
-biocontainer> list 100
-biocontainer> help
-biocontainer> quit
+biofinder> find fastqc
+biofinder> search alignment
+biofinder> versions bwa
+biofinder> list 100
+biofinder> help
+biofinder> quit
 ```
 
 ## Example Outputs
@@ -113,7 +113,7 @@ biocontainer> quit
 ### Finding a Tool
 
 ```bash
-$ ./biocontainer_client.py find fastqc
+$ ./biofinder_client.py find fastqc
 
 
 ======================================================================
@@ -163,13 +163,13 @@ singularity shell /cvmfs/singularity.galaxyproject.org/all/fastqc:0.12.1--hdfd78
 
 ## Architecture
 
-### Server (`biocontainer_server.py`)
+### Server (`biofinder_server.py`)
 - Loads and indexes both data sources on startup
 - Provides 4 MCP tools for container discovery
-- Implements intelligent search with version parsing and ranking
+- Implements search with version parsing and ranking
 - Exposes resources for cache metadata
 
-### Client (`biocontainer_client.py`)
+### Client (`biofinder_client.py`)
 - Command-line interface with multiple modes
 - Connects to server via stdio MCP transport
 - Supports both one-shot and interactive queries
@@ -196,10 +196,10 @@ This implementation follows the [Model Context Protocol](https://modelcontextpro
 1. **Quality Control Pipeline**
    ```bash
    # Find QC tools
-   ./biocontainer_client.py search "quality control"
+   ./biofinder_client.py search "quality control"
    
    # Get specific tool
-   ./biocontainer_client.py find fastqc
+   ./biofinder_client.py find fastqc
    
    # Use in your workflow
    singularity exec /cvmfs/singularity.galaxyproject.org/all/fastqc:0.12.1--hdfd78af_2 \
@@ -209,16 +209,16 @@ This implementation follows the [Model Context Protocol](https://modelcontextpro
 2. **Tool Discovery**
    ```bash
    # What can do variant calling?
-   ./biocontainer_client.py search "variant calling"
+   ./biofinder_client.py search "variant calling"
    
    # What can assemble genomes?
-   ./biocontainer_client.py search "genome assembly"
+   ./biofinder_client.py search "genome assembly"
    ```
 
 3. **Version Management**
    ```bash
    # Check what versions are available
-   ./biocontainer_client.py versions samtools
+   ./biofinder_client.py versions samtools
    
    # Use a specific version in reproducible research
    singularity exec /cvmfs/singularity.galaxyproject.org/all/samtools:1.17--h00cdaf9_0 \
@@ -282,7 +282,6 @@ Suggestions for improvements:
 - Additional query types
 - Better search algorithms
 - Integration with other registries
-- Usage documentation generation
 
 ## Contact
 
