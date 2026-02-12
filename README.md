@@ -1,120 +1,25 @@
-# BioFinder MCP
+# 🧬 BioFinder MCP
 
-A Model Context Protocol (MCP) server and client for discovering and using bioinformatics tools available in the Galaxy CVMFS Singularity container repository.
+Find bioinformatics tools available as Singularity containers on Galaxy CVMFS -
+and get ready-to-copy `shpc` commands from your terminal.
 
-## Overview
+## What does it do?
 
-This MCP provides:
-- **Container Discovery**: Find bioinformatics tools and their available container versions
-- **Metadata Search**: Search by tool name, function, or description
-- **Usage Examples**: Get copy-pastable Singularity commands
-- **Version Management**: View all available versions with paths and metadata
+BioFinder is a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP)
+server + CLI client. It indexes two data sources:
 
-## Data Sources
+| Data source | Contents |
+|---|---|
+| `toolfinder_meta.yaml` | 714 tool records with descriptions, operations, and homepage links. [Source (`AustralianBioCommons/finder-service-metadata`) ↗](https://github.com/AustralianBioCommons/finder-service-metadata) |
+| `galaxy_singularity_cache.json.gz` | 118,594 Singularity container images on Galaxy CVMFS (snapshot: 2026-01-28) |
 
-The MCP uses two authoritative data sources:
-1. **toolfinder_meta.yaml** - Tool metadata including descriptions, operations, and publications. [Sourced from `finder-service-metadata`](https://github.com/AustralianBioCommons/finder-service-metadata/blob/main/data/data.yaml)
-2. **galaxy_singularity_cache.json.gz** - Complete CVMFS container catalog (118,000+ entries)
+Given a tool name or a description of what you want to do, BioFinder returns the
+latest container path and a copy-pastable `shpc` command.
 
-## Features
-
-### Supported Queries
-
-The MCP is designed to answer queries like:
-
-- **"Where can I find fastqc?"** → Returns tool info, container versions, and usage examples
-- **"How do I use iqtree?"** → Shows the latest version and copy-pastable singularity commands
-- **"What can I use to generate count data from scRNA fastqs?"** → Searches by description/function
-- **"Show me all versions of samtools"** → Lists all available container versions with paths
-
-### Available Tools (MCP Functions)
-
-1. **find_tool** - Find a specific tool by name
-   - Returns: metadata, container versions, usage examples
-   - Example: `find fastqc`
-
-2. **search_by_function** - Search by description or operation
-   - Returns: ranked list of matching tools
-   - Example: `search quality control`
-
-3. **get_container_versions** - List all versions of a tool
-   - Returns: complete version history with CVMFS paths
-   - Example: `versions samtools`
-
-4. **list_available_tools** - Browse available tools
-   - Returns: alphabetical list of tool names
-   - Example: `list 100`
-
-## Installation
-
-### Prerequisites
-- Python 3.8+
-- pip
-
-### Setup
-
-```bash
-# Run the setup script
-chmod +x setup.sh
-./setup.sh
-```
-
-Or manually:
-
-```bash
-# Install dependencies
-pip install --break-system-packages -r requirements.txt
-
-# Make scripts executable
-chmod +x biofinder_server.py
-chmod +x biofinder_client.py
-```
-
-## Usage
-
-### Command Line Interface
-
-```bash
-# Find a specific tool
-./biofinder_client.py find fastqc
-
-# Search by function/description
-./biofinder_client.py search "quality control"
-./biofinder_client.py search "count data from scrna"
-
-# Get all versions of a tool
-./biofinder_client.py versions samtools
-
-# List available tools
-./biofinder_client.py list 50
-
-# Interactive mode
-./biofinder_client.py interactive
-```
-
-### Interactive Mode
-
-```bash
-./biofinder_client.py interactive
-```
-
-Then use commands:
-```
-biofinder> find fastqc
-biofinder> search alignment
-biofinder> versions bwa
-biofinder> list 100
-biofinder> help
-biofinder> quit
-```
-
-## Example Outputs
-
-### Finding a Tool
+## Example output
 
 ```bash
 $ ./biofinder_client.py find fastqc
-
 
 ======================================================================
 🧬 FASTQC
@@ -159,6 +64,111 @@ singularity shell /cvmfs/singularity.galaxyproject.org/all/fastqc:0.12.1--hdfd78
    ... and 24 more versions
 
 ======================================================================
+```
+
+## Quick start
+
+### Setup
+
+To get started, install Python and the required libraries.
+
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+### Example usage
+
+This demonstrates an example of starting the tool, displaying the supported commands, and a flow of finding available software that can be used for sequence alignment. 
+
+One located, you can display more information about the available versions on the file system.
+
+```bash
+# Enter interactive mode
+./biofinder_client.py 
+
+# Display help message
+biofinder> help
+
+# Search for tools related to sequence alignment
+biofinder> search sequence alignment
+
+# Find a specific tool with more information
+biofinder> find clustalo
+
+# Display all available versions
+biofinder> versions clustalo
+```
+
+## Limitations
+
+- **Keyword search only** — no semantic/embedding-based search yet.
+- **Metadata is incomplete** for many tools; descriptions and EDAM operations are
+  missing for a portion of the catalog.
+- **Container paths are not validated** at query time — they require CVMFS to be
+  mounted.
+- **Cache is a point-in-time snapshot** — new containers added to CVMFS after the
+  snapshot date won't appear until the cache is regenerated.
+
+See [DEVELOPER_REFERENCE.md → Future improvements](docs/DEVELOPER_REFERENCE.md#future-improvements)
+for the roadmap.
+
+---
+
+## Links
+
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Galaxy Project CVMFS](https://galaxyproject.org/admin/reference-data-repo/)
+- [finder-service-metadata](https://github.com/AustralianBioCommons/finder-service-metadata)
+- [CERN VM-FS](https://cernvm.cern.ch/fs/)
+
+
+## Features
+
+### Available Tools (MCP Functions)
+
+1. **find_tool** - Find a specific tool by name
+   - Returns: metadata, container versions, usage examples
+   - Example: `find fastqc`
+
+2. **search_by_function** - Search by description or operation
+   - Returns: ranked list of matching tools
+   - Example: `search quality control`
+
+3. **get_container_versions** - List all versions of a tool
+   - Returns: complete version history with CVMFS paths
+   - Example: `versions samtools`
+
+4. **list_available_tools** - Browse available tools
+   - Returns: alphabetical list of tool names
+   - Example: `list 100`
+
+## Installation
+
+### Prerequisites
+- Python 3.8+
+- pip
+
+## Usage
+
+### Command Line Interface
+
+```bash
+# Find a specific tool
+./biofinder_client.py find fastqc
+
+# Search by function/description
+./biofinder_client.py search "quality control"
+./biofinder_client.py search "count data from scrna"
+
+# Get all versions of a tool
+./biofinder_client.py versions samtools
+
+# List available tools
+./biofinder_client.py list 50
+
+# Interactive mode
+./biofinder_client.py interactive
 ```
 
 ## Architecture
