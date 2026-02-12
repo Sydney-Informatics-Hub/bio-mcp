@@ -211,7 +211,8 @@ The following are known gaps to address:
 
 - **Semantic search.** The keyword scorer produces noisy results for vague queries.
   Embedding descriptions with a small sentence-transformer and doing ANN lookup
-  would give significantly better recall and precision.
+  would give significantly better recall and precision. Consider
+  vector embeddings and retrieval.
 
 - **Score calibration.** The current integer weights have not been benchmarked
   against real queries. A small evaluation set of (query, expected_tools) pairs
@@ -231,3 +232,7 @@ The following are known gaps to address:
 - **Stale container warnings.** The cache has a `generated_at` timestamp. The
   server could warn users when the cache is older than a configurable threshold.
   Explore how CVMFS can utilise caching.
+
+- **Support for natural language queries.** Currently the MCP works best for succinct
+  and precise queries. e.g. `biofinder> search variant calling` yields more useful
+  results in comparison to `biofinder> search "Find where mutations are"`.

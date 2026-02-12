@@ -4,8 +4,6 @@ Complete reference for the CLI commands, MCP tools, and MCP resources.
 
 ---
 
-
-
 ## CLI commands
 
 ```
@@ -41,8 +39,6 @@ biofinder_client.py <command> [args]
 
 - Scores all metadata records against your query.
 - Returns results ranked by relevance score (highest first).
-- Default limit: 3 results. Pass `--limit` … actually just use interactive mode
-  and run multiple searches.
 
 ### `versions`
 
@@ -79,8 +75,6 @@ list [limit]
 help
 quit / exit
 ```
-
----
 
 ## MCP tool schema
 
@@ -196,8 +190,6 @@ Examples:
 When multiple containers exist for the same version (different build strings),
 BioFinder sorts by the full tag string as a tiebreaker, so the "latest" shown may
 not always be the numerically last build. Use `versions` to inspect all options.
-
----
 
 ## CVMFS path format
 

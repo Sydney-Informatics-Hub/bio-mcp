@@ -102,16 +102,13 @@ biofinder> find clustalo
 biofinder> versions clustalo
 ```
 
-## Features
+⚠️ Warning: The tool returns results based on **availability**. Independent research is advised to identify the best tool for your data and needs.
 
-For more
+## Next steps
 
-## Limitations
+See the [how-to guide for more examples and tips on using BioFinder effectively](docs/HOW_TO_QUERY.md).
 
-- Metadata is incomplete for many tools
-- Container availability depends on CVMFS being mounted
-- Search is keyword-based (no semantic search yet)
-- No execution or workflow management (discovery only)
+If you prefer the command-line version (e.g. for scripting and reproducibility), see the [command reference](docs/COMMAND_REFERENCE.md).
 
 ## Links
 
