@@ -51,6 +51,7 @@ SINGULARITY_CACHE_FILE = DATA_DIR / "galaxy_singularity_cache.json.gz"
 # startup — that would add ~10-30 s per model on CPU.
 MINILM_CACHE = DATA_DIR / ".embed_cache_minilm.npy"
 BIOBERT_CACHE = DATA_DIR / ".embed_cache_biobert.npy"
+MPNET_CACHE = DATA_DIR / ".embed_cache_mpnet.npy"
 META_HASH_FILE = DATA_DIR / ".embed_cache_hash"
 
 
@@ -90,14 +91,16 @@ log = logging.getLogger("biofinder")
 # Note: the user specified 'all-MiniLM-L60-v2' — there is no L60 variant;
 # the correct model is 'all-MiniLM-L6-v2' (6 transformer layers).
 MINILM_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-BIOBERT_MODEL = "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-abstracted"
+BIOBERT_MODEL = "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract"
+MPNET_MODEL = "sentence-transformers/all-mpnet-base-v2"
 
 # How much weight each model contributes to the final score (must sum to 1.0).
 # BiomedBERT gets slightly more weight because it understands the domain better,
 # but MiniLM is faster and handles informal/natural language well.
 # These can be tuned — see SEARCH_IMPROVEMENTS.md for context.
-MINILM_WEIGHT = 0.35
-BIOBERT_WEIGHT = 0.65
+MINILM_WEIGHT = 0 # disabled for testing
+BIOBERT_WEIGHT = 0 # disabled for testing
+MPNET_WEIGHT = 1 
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +204,6 @@ class SemanticSearchIndex:
             # twice because it's the most discriminating signal.
             parts = []
             if tool.get('name'):
-                parts.append(tool['name'])          # repeated for weight
                 parts.append(tool['name'])
             if tool.get('description'):
                 parts.append(tool['description'])
@@ -227,6 +229,7 @@ class SemanticSearchIndex:
             if tool.get('edam-outputs'):
                 _extend_all_values(tool['edam-outputs'])
 
+            log.info(parts)
             # Fall back to ID if the tool has no other text — at minimum
             # the embedding will understand the name string.
             corpus_text = " | ".join(parts) if parts else (tool.get('id') or '')
@@ -349,6 +352,7 @@ class BioFinderIndex:
         # They run in parallel and their scores are combined.
         self.minilm = SemanticSearchIndex(MINILM_MODEL, MINILM_CACHE, MINILM_WEIGHT)
         self.biobert = SemanticSearchIndex(BIOBERT_MODEL, BIOBERT_CACHE, BIOBERT_WEIGHT)
+        self.mpnet = SemanticSearchIndex(MPNET_MODEL, MPNET_CACHE, MPNET_WEIGHT)
 
     # ------------------------------------------------------------------
     # Data loading
@@ -394,13 +398,15 @@ class BioFinderIndex:
         """
         meta_hash = self._hash_file(METADATA_FILE)
 
-        for index in (self.minilm, self.biobert):
-            if index.load_model():
-                index.build_embeddings(self.metadata, meta_hash)
+        #for index in (self.minilm, self.biobert, self.mpnet):
+        #    if index.load_model():
+        #        index.build_embeddings(self.metadata, meta_hash)
+        if self.mpnet.load_model():
+            self.mpnet.build_embeddings(self.metadata, meta_hash)
 
-        if not self.minilm.available and not self.biobert.available:
+        if not self.minilm.available and not self.biobert.available and not self.mpnet.available:
             log.warning(
-                "Neither embedding model is available. "
+                "None of the embedding models are available. "
                 "search_by_function will use keyword scoring instead. "
                 "Install sentence-transformers to enable semantic search."
             )
@@ -495,7 +501,7 @@ class BioFinderIndex:
         Returns:
             List of dicts with keys 'tool', 'score', 'score_detail'.
         """
-        semantic_available = self.minilm.available or self.biobert.available
+        semantic_available = self.minilm.available or self.biobert.available or self.mpnet.available
 
         if not semantic_available:
             log.warning("No embedding models available — using keyword fallback")
@@ -508,32 +514,43 @@ class BioFinderIndex:
 
         minilm_scores: Dict[str, float] = {}
         biobert_scores: Dict[str, float] = {}
+        mpnet_scores: Dict[str, float] = {}
 
         if self.minilm.available:
             for tool_id, score in self.minilm.query(query, candidate_pool):
                 minilm_scores[tool_id] = score
+            log.info(f"MiniLM top score: {max(minilm_scores.values()):.4f} for tool {max(minilm_scores, key=minilm_scores.get)}")
 
         if self.biobert.available:
             for tool_id, score in self.biobert.query(query, candidate_pool):
                 biobert_scores[tool_id] = score
+            log.info(f"BiomedBERT top score: {max(biobert_scores.values()):.4f} for tool {max(biobert_scores, key=biobert_scores.get)}")
 
+        if self.mpnet.available:
+            for tool_id, score in self.mpnet.query(query, candidate_pool):
+                mpnet_scores[tool_id] = score
+            log.info(f"MPNet top score: {max(mpnet_scores.values()):.4f} for tool {max(mpnet_scores, key=mpnet_scores.get)}")
+        
         # --- Step 2: combine scores ----------------------------------------
         # Union of all tool IDs that appeared in either model's top results.
-        all_ids = set(minilm_scores) | set(biobert_scores)
+        all_ids = set(minilm_scores) | set(biobert_scores) | set(mpnet_scores)
 
         combined: List[Dict] = []
         for tool_id in all_ids:
             m_score = minilm_scores.get(tool_id, 0.0)
             b_score = biobert_scores.get(tool_id, 0.0)
+            p_score = mpnet_scores.get(tool_id, 0.0)
 
             # If only one model fired, use its full weight rather than
             # penalising the tool for not appearing in the other model's pool.
-            if m_score and b_score:
-                semantic_score = (MINILM_WEIGHT * m_score) + (BIOBERT_WEIGHT * b_score)
+            if m_score and b_score and p_score:
+                semantic_score = (MINILM_WEIGHT * m_score) + (BIOBERT_WEIGHT * b_score) + (MPNET_WEIGHT * p_score)
             elif m_score:
                 semantic_score = m_score
             else:
                 semantic_score = b_score
+
+            log.info(f"Raw scores for {tool_id}: MiniLM={m_score:.4f}, BiomedBERT={b_score:.4f}, MPNet={p_score:.4f}, Combined={semantic_score:.4f}")
 
             # --- Step 3: container-count boost ----------------------------
             # Tools with many container versions are more widely adopted.
@@ -545,7 +562,7 @@ class BioFinderIndex:
             container_boost = np.log1p(n_containers) * 0.08
 
             final_score = semantic_score + container_boost
-
+            log.info(f"Final score for {tool_id}: {final_score:.4f} (semantic {semantic_score:.4f} + container boost {container_boost:.4f} for {n_containers} containers)")
             # Look up the full metadata dict for this tool_id
             tool_meta = next(
                 (e for e in self.metadata if (e.get('id') or '') == tool_id),
@@ -880,6 +897,7 @@ async def _handle_search(arguments: Dict) -> list[TextContent]:
     limit = arguments.get("limit", 5)
 
     results = index.search_by_function(query, limit)
+    log.info(f"search_by_function found {len(results)} results for query: '{query}'")
 
     if not results:
         return [TextContent(
@@ -905,6 +923,8 @@ async def _handle_search(arguments: Dict) -> list[TextContent]:
         active_models.append("all-MiniLM-L6-v2")
     if index.biobert.available:
         active_models.append("BiomedBERT")
+    if index.mpnet.available:
+        active_models.append("all-mpnet-base-v2")
     if active_models:
         parts.append(f" using {' + '.join(active_models)}")
     parts.append(".\n")

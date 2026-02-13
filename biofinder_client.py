@@ -9,10 +9,20 @@ import asyncio
 import sys
 import json
 from pathlib import Path
+import logging
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+
+logging.basicConfig(
+    stream=sys.stderr,
+    level=logging.INFO,
+    format="%(asctime)s [biofinder] %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+log = logging.getLogger("biofinder")
 
 async def query_tool(session: ClientSession, tool_name: str):
     """Query for a specific tool."""
@@ -30,6 +40,7 @@ async def search_function(session: ClientSession, description: str, limit: int =
         {"description": description, "limit": limit}
     )
     
+    log.info(f"search_by_function returned {len(result.content)} results for description: '{description}'")
     for content in result.content:
         if hasattr(content, 'text'):
             print(content.text)
