@@ -1,2 +1,23 @@
+# Core MCP protocol library
 mcp>=1.0.0
+
+# YAML parsing for toolfinder_meta.yaml
 pyyaml>=6.0
+
+# Numerical operations — used for cosine similarity between embeddings.
+# numpy is usually already present; listing it here pins the minimum version.
+numpy>=1.24
+
+# Sentence embedding models — required for semantic search.
+#
+# Provides the SentenceTransformer class that loads and runs both:
+#   - sentence-transformers/all-MiniLM-L6-v2  (fast, general-purpose)
+#   - microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-abstracted (bio domain)
+#
+# Pulls in torch and transformers as transitive dependencies (~1-2 GB total
+# on first install, depending on platform and whether CUDA is available).
+#
+# BioFinder degrades gracefully if this is absent — search falls back to
+# keyword scoring. Remove or comment out this line if you want a lightweight
+# install without semantic search.
+sentence-transformers>=2.7
