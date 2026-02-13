@@ -15,25 +15,38 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from collections import defaultdict
 import re
+from query import STOP_WORDS
+import logging
+import sys
+from difflib import get_close_matches
 
 # MCP SDK imports
+# The MCP server exposes "tools" (callable functions) and "resources" (readable
+# data) over a JSON-RPC protocol on stdio. The client (biofinder_client.py)
+# spawns this process and talks to it over its stdin/stdout pipes.
 from mcp.server import Server
-from mcp.types import (
-    Resource,
-    Tool,
-    TextContent,
-    ImageContent,
-    EmbeddedResource,
-    LoggingLevel
-)
-import mcp.server.stdio
+from mcp.types import (Resource, Tool, TextContent)
 
+import mcp.server.stdio
 
 # Data paths
 DATA_DIR = Path(__file__).resolve().parent
 METADATA_FILE = DATA_DIR / "toolfinder_meta.yaml"
 SINGULARITY_CACHE_FILE = DATA_DIR / "galaxy_singularity_cache.json.gz"
 
+
+# Logging
+# We log to stderr only. stdout is reserved exclusively for MCP JSON-RPC
+# messages — a single stray print() to stdout will corrupt the protocol and
+# break the client connection.
+logging.basicConfig(
+    stream=sys.stderr,
+    level=logging.INFO,
+    format="%(asctime)s [biofinder] %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+log = logging.getLogger("biofinder")
 
 class BioFinderIndex:
     """Index of container metadata and singularity images."""
@@ -48,13 +61,13 @@ class BioFinderIndex:
     def load_data(self):
         """Load metadata and singularity cache."""
         # Load metadata YAML
-        #print(f"Loading metadata from {METADATA_FILE}...")
+        log.info(f"Loading metadata from {METADATA_FILE}...")
         with open(METADATA_FILE, 'r') as f:
             self.metadata = yaml.safe_load(f)
-        #print(f"Loaded {len(self.metadata)} tool metadata entries")
+        log.info(f"Loaded {len(self.metadata)} tool metadata entries")
         
         # Load singularity cache
-        #print(f"Loading singularity cache from {SINGULARITY_CACHE_FILE}...")
+        log.info(f"Loading singularity cache from {SINGULARITY_CACHE_FILE}...")
         with gzip.open(SINGULARITY_CACHE_FILE, 'rt') as f:
             cache_data = json.load(f)
             self.cache_info = {
@@ -63,7 +76,7 @@ class BioFinderIndex:
                 'entry_count': cache_data['entry_count']
             }
             self.singularity_entries = cache_data['entries']
-        #print(f"Loaded {len(self.singularity_entries)} singularity entries")
+        log.info(f"Loaded {len(self.singularity_entries)} singularity entries")
         
         # Build indexes
         self._build_indexes()
@@ -153,63 +166,81 @@ class BioFinderIndex:
             'containers': containers_sorted,
             'container_count': len(containers_sorted)
         }
-    
-    def search_by_description(self, query: str, limit: int = 3) -> List[Dict[str, Any]]:
+
+    def _normalise(self, text: str) -> List[str]:
+        text = text.lower()
+        text = re.sub(r"[^\w\s\-]", " ", text)
+        return text.split()
+
+    def _flatten_edam(self, value):
+        """Flatten EDAM fields safely."""
+        results = []
+        if not value:
+            return results
+
+        if isinstance(value, list):
+            for v in value:
+                if isinstance(v, dict):
+                    if "term" in v and v["term"]:
+                        results.append(str(v["term"]))
+                    if "formats" in v and v["formats"]:
+                        if isinstance(v["formats"], list):
+                            results.extend(map(str, v["formats"]))
+                        else:
+                            results.append(str(v["formats"]))
+                else:
+                    results.append(str(v))
+        else:
+            results.append(str(value))
+
+        return results
+
+    def _search_metadata(self, query: str) -> List[str]:
+        """
+        Search metadata and return matching tool names.
+        OR-based matching with token-level accuracy.
+        """
+
+        query_tokens = set(self._normalise(query))
+        results = []
+
+        for entry in self.metadata:
+            entry_id = str(entry.get("id") or "")
+            entry_name = str(entry.get("name") or "")
+            entry_description = str(entry.get("description") or "")
+
+            text_parts = [entry_id, entry_name, entry_description]
+
+            for field in (
+                "edam-operations",
+                "edam-topics",
+                "edam-inputs",
+                "edam-outputs",
+            ):
+                text_parts.extend(self._flatten_edam(entry.get(field)))
+
+            searchable_tokens = set(self._normalise(" ".join(text_parts)))
+
+            if not searchable_tokens:
+                continue
+
+            # Token intersection instead of substring matching
+            overlap = query_tokens.intersection(searchable_tokens)
+
+            if overlap:
+                tool_name = entry_name or entry_id
+                if tool_name:
+                    results.append(tool_name)
+
+        return sorted(set(results))
+ 
+    def search_by_description(self, query: str) -> List[str]:
         """
         Search tools by description or functionality.
         Useful for queries like "What can I use to generate count data?"
         """
-        query_lower = query.lower()
-        query_terms = set(query_lower.split())
-        
-        results = []
-        
-        for entry in self.metadata:
-            # TODO: Benchmark scoring. Improve suggestions with LLM. Rescore based on e.g. prioritising EDAM matches
-            score = 0
-            
-            # Search in description
-            description = (entry.get('description') or '').lower()
-            if description:
-                desc_terms = set(description.split())
-                # Count matching terms
-                matches = query_terms.intersection(desc_terms)
-                score += len(matches) * 2
-                
-                # Boost if query is a substring of description
-                if query_lower in description:
-                    score += 5
-            
-            # Search in EDAM operations (what the tool does)
-            operations = entry.get('edam-operations', []) or []
-            for op in operations:
-                if op and query_lower in op.lower():
-                    score += 3
-            
-            # Search in EDAM topics
-            topics = entry.get('edam-topics', []) or []
-            for topic in topics:
-                if topic and query_lower in topic.lower():
-                    score += 2
-            
-            # Search in name and ID
-            name = (entry.get('name') or '').lower()
-            if query_lower in name:
-                score += 4
-            
-            entry_id = (entry.get('id') or '').lower()
-            if query_lower in entry_id:
-                score += 4
-                
-            if score > 0:
-                results.append({
-                    'tool': entry,
-                    'score': score
-                })
-        
-        # Sort by score and return top results
-        results.sort(key=lambda x: x['score'], reverse=True)
-        return results[:limit]
+        log.info(query)
+        return self._search_metadata(query)
     
     def list_all_tools(self, limit: int = 10) -> List[str]:
         """List all available tool names."""
@@ -431,7 +462,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         description = arguments["description"]
         limit = arguments.get("limit", 10)
         
-        results = index.search_by_description(description, limit)
+        results = index.search_by_description(description)
         
         if not results:
             return [TextContent(
@@ -445,28 +476,8 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         response_parts.append(f"{'='*70}\n\n")
         response_parts.append(f"Found {len(results)} matching tools.\n")
         
-        for i, result_item in enumerate(results, 1):
-            tool = result_item['tool']
-            score = result_item['score']
-
-            tool_name = tool.get('name') or tool.get('id', 'Unknown')
-            tool_id = tool.get('id', 'N/A')
-            response_parts.append(f"\n{'─'*70}\n")
-            response_parts.append(f"{i:2}. 🧬 {tool_name} (`{tool_id}`)  |  Score: {score:.3f}\n")
-            response_parts.append(f"{'─'*70}\n")
-
-            if tool.get('description'):
-                response_parts.append(f"📝 {tool['description']}\n")
-
-            if tool.get('edam-operations'):
-                response_parts.append(f"⚙️  Operations: {', '.join(tool['edam-operations'])}\n")
-
-            # Check if containers available
-            tool_search = index.search_tool(tool.get('id', ''))
-            if tool_search['containers']:
-                latest = tool_search['containers'][0]
-                response_parts.append(f"📦 Latest Container: `{latest['tag']}`\n")
-                response_parts.append(f"Quick Start: `singularity exec {latest['path']} {tool.get('id', '')} --help`\n")
+        for i, tool_name in enumerate(results, 1):
+            response_parts.append(f"{i:2}. {tool_name}\n")
         
         return [TextContent(type="text", text="".join(response_parts))]
     
