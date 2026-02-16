@@ -98,6 +98,7 @@ STOP_WORDS = {
         "input",
         "file",
         "files",
+        "sequence", # currently returns > 200 tools
     },
 
     # =========================
