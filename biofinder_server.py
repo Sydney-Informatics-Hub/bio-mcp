@@ -201,17 +201,22 @@ class BioFinderIndex:
 
         HOW IT WORKS
         ------------
-        1. The query is normalised (lowercased, cleaned, split into tokens).
+        1. The query is normalised (lowercased, cleaned with _normalise(), split into tokens).
         2. Tokens are expanded to improve matching:
              - Keep original token
              - Remove hyphens (rna-seq → rnaseq)
              - Split hyphenated terms (rna-seq → rna, seq)
+            
         3. Each tools searchable text is built from:
              - id, name, description
              - edam-operations, edam-topics, edam-inputs, edam-outputs
            (EDAM fields are flattened to plain strings.)
         4. A tool matches if ANY expanded query token overlaps with
            ANY expanded metadata token.
+        
+        EXAMPLE
+        -------
+        "RNA-seq alignment" -> tokens: ["rna-seq", "alignment"] + expansions ["rnaseq", "rna", "seq", "alignment"]
 
         NOTES
         -----
