@@ -197,8 +197,30 @@ class BioFinderIndex:
 
     def _search_metadata(self, query: str) -> List[str]:
         """
-        Search metadata and return matching tool names.
-        OR partial-based matching with token-level accuracy.
+        Search tool metadata using token-based OR matching.
+
+        HOW IT WORKS
+        ------------
+        1. The query is normalised (lowercased, cleaned, split into tokens).
+        2. Tokens are expanded to improve matching:
+             - Keep original token
+             - Remove hyphens (rna-seq → rnaseq)
+             - Split hyphenated terms (rna-seq → rna, seq)
+        3. Each tools searchable text is built from:
+             - id, name, description
+             - edam-operations, edam-topics, edam-inputs, edam-outputs
+           (EDAM fields are flattened to plain strings.)
+        4. A tool matches if ANY expanded query token overlaps with
+           ANY expanded metadata token.
+
+        NOTES
+        -----
+        - Matching is case-insensitive.
+        - OR-based (at least one token match returns the tool).
+        - No ranking or fuzzy matching.
+        - Partial substrings (e.g. "align") do not match "alignment".
+
+        Returns a list of unique matching tool names.
         """
         class SearchResults(list):
             def __contains__(self, item):
